@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Handy AI — Bloom by Hand</title>
+<style>
+  :root{
+    --umber:#241209;
+    --umber-2:#3d1f0f;
+    --ember:#ff6b35;
+    --gold:#ffd23f;
+    --petal:#ffc23c;
+    --petal-deep:#f5941f;
+    --seed:#3d2817;
+    --seed-2:#5c3a20;
+    --stem:#4a6741;
+    --stem-dark:#324a2c;
+    --cream:#fff3e0;
+    --ink:#241209;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    overflow:hidden;
+    background:var(--umber);
+    font-family:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
+    color:var(--cream);
+    touch-action:none;
+    overscroll-behavior:none;
+  }
+  #app{
+    position:fixed; inset:0;
+    width:100vw; height:100dvh;
+  }
+
+  /* sky backdrop */
+  #sky{
+    position:absolute; inset:0;
+    background:
+      radial-gradient(ellipse at 50% 115%, rgba(255,178,39,.55), transparent 60%),
+      linear-gradient(180deg, var(--umber) 0%, var(--umber-2) 45%, #6a2e12 72%, var(--ember) 100%);
+    transition:filter 1.2s ease;
+  }
+  #sky::before{
+    content:'';
+    position:absolute; inset:0;
+    background-image:
+      radial-gradient(2px 2px at 10% 20%, rgba(255,255,255,.5), transparent),
+      radial-gradient(1.5px 1.5px at 80% 15%, rgba(255,255,255,.4), transparent),
+      radial-gradient(1.5px 1.5px at 60% 30%, rgba(255,255,255,.3), transparent),
+      radial-gradient(2px 2px at 30% 10%, rgba(255,255,255,.4), transparent),
+      radial-gradient(1px 1px at 90% 35%, rgba(255,255,255,.3), transparent);
+    opacity:.7;
+  }
+
+  video#cam{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:cover;
+    transform:scaleX(-1);
+    opacity:0;
+    pointer-events:none;
+  }
+  #camDim{
+    position:absolute; inset:0;
+    background:rgba(20,10,5,.72);
+    mix-blend-mode:multiply;
+    pointer-events:none;
+    opacity:0;
+    transition:opacity .8s ease;
+  }
+  body.cam-visible #camDim{ opacity:1; }
+  body.cam-visible video#cam{ opacity:.5; }
+
+  canvas#scene{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+  }
+
+  /* ground */
+  #ground{
+    position:absolute; left:0; right:0; bottom:0; height:22%;
+    background:linear-gradient(180deg, rgba(50,30,15,0) 0%, rgba(30,17,8,.9) 60%, var(--umber) 100%);
+    pointer-events:none;
+  }
+
+  /* ---------- overlay UI ---------- */
+  .overlay{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    text-align:center;
+    padding:6vh 6vw;
+    z-index:20;
+    background:radial-gradient(ellipse at 50% 40%, rgba(61,31,15,.55), rgba(36,18,9,.92) 75%);
+    transition:opacity .6s ease, visibility .6s ease;
+  }
+  .overlay.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+
+  .eyebrow{
+    font-family:'Courier New',monospace;
+    letter-spacing:.35em;
+    font-size:.7rem;
+    text-transform:uppercase;
+    color:var(--gold);
+    opacity:.8;
+    margin-bottom:1.1rem;
+  }
+  h1{
+    font-size:clamp(2.4rem, 9vw, 4.4rem);
+    margin:0 0 .5rem;
+    font-weight:400;
+    letter-spacing:.01em;
+    color:var(--cream);
+    text-shadow:0 0 40px rgba(255,178,39,.35);
+  }
+  h1 em{
+    font-style:italic;
+    color:var(--gold);
+  }
+  .sub{
+    max-width:36rem;
+    font-size:clamp(.95rem, 2.6vw, 1.15rem);
+    line-height:1.6;
+    color:rgba(255,243,224,.8);
+    margin:0 0 2.2rem;
+  }
+  .sub b{ color:var(--gold); font-weight:600; }
+
+  button.primary{
+    font-family:inherit;
+    font-size:1.05rem;
+    letter-spacing:.02em;
+    color:var(--umber);
+    background:linear-gradient(180deg, var(--gold), var(--petal-deep));
+    border:none;
+    padding:.95rem 2.4rem;
+    border-radius:999px;
+    cursor:pointer;
+    box-shadow:0 10px 30px rgba(245,148,31,.35), inset 0 1px 0 rgba(255,255,255,.5);
+    transition:transform .18s ease, box-shadow .18s ease;
+  }
+  button.primary:active{ transform:scale(.96); }
+  button.primary:hover{ box-shadow:0 14px 36px rgba(245,148,31,.5), inset 0 1px 0 rgba(255,255,255,.6); }
+
+  .hint{
+    margin-top:1.4rem;
+    font-size:.8rem;
+    color:rgba(255,243,224,.55);
+    max-width:26rem;
+  }
+  .errorbox{
+    margin-top:1.2rem;
+    font-size:.85rem;
+    color:#ffb3a0;
+    max-width:26rem;
+    display:none;
+  }
+
+  /* HUD */
+  #hud{
+    position:absolute;
+    top:max(18px, env(safe-area-inset-top));
+    left:0; right:0;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:0 18px;
+    z-index:15;
+    pointer-events:none;
+    opacity:0;
+    transition:opacity .8s ease;
+  }
+  #hud.show{ opacity:1; }
+  .brand{
+    font-family:'Courier New',monospace;
+    font-size:.68rem;
+    letter-spacing:.28em;
+    text-transform:uppercase;
+    color:rgba(255,243,224,.75);
+    background:rgba(36,18,9,.4);
+    backdrop-filter:blur(6px);
+    padding:.5rem .8rem;
+    border-radius:999px;
+    border:1px solid rgba(255,210,63,.25);
+  }
+  .brand b{ color:var(--gold); }
+
+  #stateChip{
+    font-family:'Courier New',monospace;
+    font-size:.68rem;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--umber);
+    background:linear-gradient(180deg, var(--gold), var(--petal-deep));
+    padding:.5rem .9rem;
+    border-radius:999px;
+    box-shadow:0 6px 16px rgba(0,0,0,.25);
+    transition:transform .3s cubic-bezier(.34,1.56,.64,1);
+  }
+
+  #bloomMeterWrap{
+    position:absolute;
+    bottom:max(22px, env(safe-area-inset-bottom));
+    left:50%;
+    transform:translateX(-50%);
+    width:min(70vw, 320px);
+    z-index:15;
+    opacity:0;
+    transition:opacity .8s ease;
+    pointer-events:none;
+  }
+  #bloomMeterWrap.show{ opacity:1; }
+  .meterLabel{
+    font-family:'Courier New',monospace;
+    font-size:.62rem;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    color:rgba(255,243,224,.65);
+    text-align:center;
+    margin-bottom:6px;
+  }
+  #bloomTrack{
+    height:6px;
+    border-radius:999px;
+    background:rgba(255,255,255,.12);
+    overflow:hidden;
+    border:1px solid rgba(255,210,63,.2);
+  }
+  #bloomFill{
+    height:100%;
+    width:0%;
+    background:linear-gradient(90deg, var(--stem), var(--gold), var(--petal-deep));
+    transition:width .12s linear;
+  }
+
+  #switchCam{
+    position:absolute;
+    top:max(18px, env(safe-area-inset-top));
+    right:18px;
+    z-index:16;
+    width:42px; height:42px;
+    border-radius:50%;
+    background:rgba(36,18,9,.55);
+    border:1px solid rgba(255,210,63,.3);
+    color:var(--gold);
+    font-size:1.1rem;
+    display:none;
+    align-items:center; justify-content:center;
+    backdrop-filter:blur(6px);
+  }
+  #switchCam.show{ display:flex; }
+
+  .spinner{
+    width:26px; height:26px;
+    border-radius:50%;
+    border:2.5px solid rgba(255,210,63,.25);
+    border-top-color:var(--gold);
+    animation:spin 1s linear infinite;
+    margin:0 auto 1.2rem;
+    display:none;
+  }
+  .spinner.show{ display:block; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  @media (max-width: 480px){
+    #hud{ padding:0 14px; }
+    .brand{ font-size:.6rem; padding:.42rem .7rem; }
+  }
+
+  .visually-hidden{
+    position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="sky"></div>
+  <video id="cam" playsinline muted autoplay></video>
+  <div id="camDim"></div>
+  <canvas id="scene"></canvas>
+  <div id="ground"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="brand">Handy <b>AI</b> · Sunflower</div>
+    <div id="stateChip">Seed</div>
+  </div>
+
+  <button id="switchCam" aria-label="Switch camera">⟲</button>
+
+  <div id="bloomMeterWrap">
+    <div class="meterLabel">Bloom</div>
+    <div id="bloomTrack"><div id="bloomFill"></div></div>
+  </div>
+
+  <!-- Intro / permission overlay -->
+  <div class="overlay" id="introOverlay">
+    <div class="eyebrow">A Field Grown By Your Hand</div>
+    <h1>Handy <em>AI</em></h1>
+    <p class="sub">
+      Hold your hand up to the camera. <b>Close your fist</b> to keep the sunflower
+      a tight seed, and <b>open your palm</b> to watch every petal unfurl toward the light.
+      Tilt your hand to turn its face across the sky.
+    </p>
+    <div class="spinner" id="spinner"></div>
+    <button class="primary" id="startBtn">Grow with your hand</button>
+    <p class="hint">Uses your camera locally in the browser — nothing is recorded or sent anywhere.</p>
+    <p class="errorbox" id="errorBox"></p>
+  </div>
+</div>
+
+<!-- MediaPipe Hands via CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================================================
+     DOM refs
+  ============================================================ */
+  const introOverlay = document.getElementById('introOverlay');
+  const startBtn      = document.getElementById('startBtn');
+  const spinner       = document.getElementById('spinner');
+  const errorBox      = document.getElementById('errorBox');
+  const videoEl        = document.getElementById('cam');
+  const canvas         = document.getElementById('scene');
+  const ctx            = canvas.getContext('2d', { alpha:true });
+  const hud            = document.getElementById('hud');
+  const stateChip      = document.getElementById('stateChip');
+  const bloomMeterWrap = document.getElementById('bloomMeterWrap');
+  const bloomFill      = document.getElementById('bloomFill');
+  const switchCamBtn   = document.getElementById('switchCam');
+  const skyEl          = document.getElementById('sky');
+
+  let running = false;
+  let facingMode = 'user';
+  let hasMultipleCams = false;
+
+  /* ============================================================
+     Canvas sizing
+  ============================================================ */
+  let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+  function resize(){
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  /* ============================================================
+     Flower state — smoothed values driven by hand tracking
+  ============================================================ */
+  const flower = {
+    bloom: 0,        // 0 = closed bud, 1 = full bloom
+    bloomTarget: 0,
+    tiltX: 0,        // -1..1 turn toward sun (from hand x position)
+    tiltXTarget: 0,
+    tiltY: 0,
+    tiltYTarget: 0,
+    sway: 0,         // ambient sway phase
+    stemGrow: 0,     // 0..1 stem height reveal
+    stemGrowTarget: 0,
+    handPresent: false,
+    handPresentSmooth: 0,
+    lastSeenAt: 0,
+    petalWiggleSeed: Math.random()*1000,
+  };
+
+  let state = 'seed'; // seed -> bud -> blooming -> bloom
+  function computeState(b){
+    if (b < 0.08) return 'seed';
+    if (b < 0.35) return 'bud';
+    if (b < 0.85) return 'blooming';
+    return 'bloom';
+  }
+  const stateLabels = { seed:'Seed', bud:'Bud', blooming:'Blooming', bloom:'Full Bloom' };
+
+  /* ============================================================
+     MediaPipe Hands setup
+  ============================================================ */
+  let hands, cameraUtil;
+
+  function landmarkDist(a, b){
+    const dx = a.x-b.x, dy = a.y-b.y, dz=(a.z||0)-(b.z||0);
+    return Math.sqrt(dx*dx+dy*dy+dz*dz);
+  }
+
+  // Estimate "openness" 0..1 from landmarks:
+  // compare fingertip-to-wrist distances vs a palm-size reference,
+  // and factor in curl (tip vs pip distance to wrist).
+  function computeOpenness(lm){
+    const wrist = lm[0];
+    const middleMcp = lm[9];
+    const palmSize = landmarkDist(wrist, middleMcp) || 0.1;
+
+    const tips = [4,8,12,16,20];
+    const pips = [3,6,10,14,18];
+    let openSum = 0;
+    for (let i=0;i<tips.length;i++){
+      const tip = lm[tips[i]];
+      const pip = lm[pips[i]];
+      const tipDist = landmarkDist(tip, wrist);
+      const pipDist = landmarkDist(pip, wrist);
+      // ratio > 1 means tip is further than pip (finger extended)
+      const ratio = tipDist / (pipDist || 0.001);
+      const norm = Math.max(0, Math.min(1, (ratio - 0.85) / (1.6 - 0.85)));
+      openSum += norm;
+    }
+    let openness = openSum / tips.length;
+
+    // also normalize a bit using palmSize so distance-to-camera matters less
+    return Math.max(0, Math.min(1, openness));
+  }
+
+  function onResults(results){
+    const now = performance.now();
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0){
+      const lm = results.multiHandLandmarks[0];
+      flower.handPresent = true;
+      flower.lastSeenAt = now;
+
+      const openness = computeOpenness(lm);
+      flower.bloomTarget = openness;
+      flower.stemGrowTarget = Math.max(flower.stemGrowTarget, 0.15 + openness*0.85);
+
+      // hand horizontal position (mirrored view) drives tilt
+      const wrist = lm[0];
+      const midTip = lm[12];
+      const cx = (wrist.x + midTip.x)/2; // 0..1
+      const cy = (wrist.y + midTip.y)/2;
+      // mirror because video is mirrored visually
+      flower.tiltXTarget = (0.5 - cx) * 2; // -1..1
+      flower.tiltYTarget = (0.5 - cy) * 1.4;
+    } else {
+      flower.handPresent = false;
+      // gentle relax toward a small idle bud when hand leaves
+      if (now - flower.lastSeenAt > 600){
+        flower.bloomTarget = Math.max(0, flower.bloomTarget - 0.004*(now-flower._lastFrame||16));
+        flower.tiltXTarget *= 0.98;
+        flower.tiltYTarget *= 0.98;
+      }
+    }
+    flower._lastFrame = now;
+  }
+
+  async function initHands(){
+    hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.55
+    });
+    hands.onResults(onResults);
+  }
+
+  let rafId = null;
+  async function processFrame(){
+    if (!running) return;
+    try{
+      await hands.send({ image: videoEl });
+    }catch(e){ /* swallow transient errors */ }
+    rafId = requestAnimationFrame(processFrame);
+  }
+
+  /* ============================================================
+     Camera setup (manual getUserMedia for mobile reliability)
+  ============================================================ */
+  let currentStream = null;
+
+  async function startCamera(mode){
+    if (currentStream){
+      currentStream.getTracks().forEach(t=>t.stop());
+    }
+    const constraints = {
+      audio:false,
+      video:{
+        facingMode: { ideal: mode },
+        width: { ideal: 960 },
+        height:{ ideal: 720 }
+      }
+    };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    currentStream = stream;
+    videoEl.srcObject = stream;
+    await videoEl.play();
+
+    // mirror only for front camera
+    videoEl.style.transform = (mode === 'user') ? 'scaleX(-1)' : 'scaleX(1)';
+
+    return stream;
+  }
+
+  async function detectMultipleCameras(){
+    try{
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams = devices.filter(d => d.kind === 'videoinput');
+      hasMultipleCams = cams.length > 1;
+      switchCamBtn.classList.toggle('show', hasMultipleCams);
+    }catch(e){ /* ignore */ }
+  }
+
+  switchCamBtn.addEventListener('click', async () => {
+    facingMode = (facingMode === 'user') ? 'environment' : 'user';
+    try{
+      await startCamera(facingMode);
+    }catch(e){
+      facingMode = (facingMode === 'user') ? 'environment' : 'user';
+    }
+  });
+
+  /* ============================================================
+     Start flow
+  ============================================================ */
+  startBtn.addEventListener('click', async () => {
+    errorBox.style.display = 'none';
+    spinner.classList.add('show');
+    startBtn.disabled = true;
+    startBtn.style.opacity = '.6';
+    try{
+      await initHands();
+      await startCamera(facingMode);
+      await detectMultipleCameras();
+
+      running = true;
+      document.body.classList.add('cam-visible');
+      hud.classList.add('show');
+      bloomMeterWrap.classList.add('show');
+      introOverlay.classList.add('hidden');
+
+      processFrame();
+      requestAnimationFrame(loop);
+
+      // fade the raw camera view down after a moment so the flower reads clearly
+      setTimeout(()=>{ document.getElementById('camDim').style.opacity = '0.86'; }, 1400);
+
+    }catch(err){
+      console.error(err);
+      spinner.classList.remove('show');
+      startBtn.disabled = false;
+      startBtn.style.opacity = '1';
+      let msg = 'Could not access the camera. ';
+      if (err && err.name === 'NotAllowedError'){
+        msg += 'Please allow camera permission and try again.';
+      } else if (err && err.name === 'NotFoundError'){
+        msg += 'No camera was found on this device.';
+      } else {
+        msg += 'Please check your browser settings and try again.';
+      }
+      errorBox.textContent = msg;
+      errorBox.style.display = 'block';
+    }
+  });
+
+  /* ============================================================
+     Drawing: the sunflower
+  ============================================================ */
+
+  function lerp(a,b,t){ return a + (b-a)*t; }
+  function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
+  function clamp01(v){ return Math.max(0, Math.min(1, v)); }
+
+  function drawStem(cx, groundY, topY, sway, grow){
+    if (grow <= 0.001) return;
+    const height = (groundY - topY) * grow;
+    const baseY = groundY;
+    const topActualY = groundY - height;
+
+    ctx.save();
+    ctx.strokeStyle = 'transparent';
+    const stemWidth = 14;
+
+    // stem as bezier curve with sway
+    const swayAmt = sway * 26;
+    const grad = ctx.createLinearGradient(0, topActualY, 0, baseY);
+    grad.addColorStop(0, '#5d7a4e');
+    grad.addColorStop(1, '#2e4326');
+    ctx.fillStyle = grad;
+
+    ctx.beginPath();
+    ctx.moveTo(cx - stemWidth/2, baseY);
+    ctx.quadraticCurveTo(cx + swayAmt*0.5, lerp(baseY, topActualY, 0.5), cx + swayAmt - stemWidth/2, topActualY);
+    ctx.lineTo(cx + swayAmt + stemWidth/2, topActualY);
+    ctx.quadraticCurveTo(cx + swayAmt*0.5, lerp(baseY, topActualY, 0.5), cx + stemWidth/2, baseY);
+    ctx.closePath();
+    ctx.fill();
+
+    // leaves
+    if (grow > 0.25){
+      const leafT1 = 0.62, leafT2 = 0.38;
+      drawLeaf(cx, baseY, topActualY, swayAmt, leafT1, -1, grow);
+      drawLeaf(cx, baseY, topActualY, swayAmt, leafT2, 1, grow);
+    }
+    ctx.restore();
+  }
+
+  function drawLeaf(cx, baseY, topY, swayAmt, t, side, grow){
+    const y = lerp(baseY, topY, t);
+    const x = cx + swayAmt*t;
+    const len = 70 * clamp01((grow-0.2)/0.8) ;
+    if (len < 4) return;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(side * 0.5 + swayAmt*0.004);
+    ctx.scale(side, 1);
+    const leafGrad = ctx.createLinearGradient(0,0,len,0);
+    leafGrad.addColorStop(0, '#3c5a34');
+    leafGrad.addColorStop(1, '#6f9459');
+    ctx.fillStyle = leafGrad;
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.quadraticCurveTo(len*0.55, -len*0.32, len, -2);
+    ctx.quadraticCurveTo(len*0.55, len*0.28, 0, 6);
+    ctx.closePath();
+    ctx.fill();
+    // leaf vein
+    ctx.strokeStyle = 'rgba(255,255,255,.15)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(4,1);
+    ctx.lineTo(len*0.9, -1);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Draws the sepal/bud casing behind petals for low bloom values
+  function drawSepals(cx, cy, r, bloom, time){
+    const n = 5;
+    const closeAmt = clamp01(1 - bloom*1.6); // strong only near seed/bud
+    if (closeAmt <= 0.01) return;
+    for (let i=0;i<n;i++){
+      const ang = (i/n) * Math.PI*2 + time*0.05;
+      const len = r * (0.95 + 0.35*closeAmt);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(ang);
+      const grad = ctx.createLinearGradient(0,0,0,-len);
+      grad.addColorStop(0, '#3a5230');
+      grad.addColorStop(1, '#597a45');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(-r*0.28*closeAmt, 0);
+      ctx.quadraticCurveTo(-r*0.22*closeAmt, -len*0.6, 0, -len);
+      ctx.quadraticCurveTo(r*0.22*closeAmt, -len*0.6, r*0.28*closeAmt, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawPetalLayer(cx, cy, baseR, count, bloom, layerOffset, lenMul, hueShift, time, wiggleSeed){
+    const openT = easeOutCubic(clamp01(bloom));
+    for (let i=0;i<count;i++){
+      const ang0 = (i/count) * Math.PI*2 + layerOffset;
+      const wig = Math.sin(time*0.9 + i*1.7 + wiggleSeed) * (0.04 + 0.05*openT);
+      const ang = ang0 + wig*0.3;
+
+      // petal grows outward and rotates open from a folded state
+      const foldAngle = lerp(1.15, 0.0, openT); // extra bend when closed
+      const petalLen = baseR * lenMul * (0.18 + 0.82*openT);
+      const petalWidth = baseR * 0.34 * (0.35 + 0.65*openT) * lenMul;
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(ang);
+      ctx.translate(baseR*0.12, 0);
+      ctx.rotate(foldAngle * (i%2===0? 1: 0.9));
+
+      const tipHue = 46 - hueShift;   // gold
+      const baseHue = 32 - hueShift;  // deep amber near center
+      const grad = ctx.createLinearGradient(0,0,petalLen,0);
+      grad.addColorStop(0, `hsl(${baseHue}, 85%, ${38+ openT*4}%)`);
+      grad.addColorStop(0.55, `hsl(${tipHue}, 92%, ${58+openT*6}%)`);
+      grad.addColorStop(1, `hsl(${tipHue+4}, 95%, ${68+openT*8}%)`);
+      ctx.fillStyle = grad;
+
+      ctx.beginPath();
+      ctx.moveTo(0, -petalWidth*0.22);
+      ctx.quadraticCurveTo(petalLen*0.45, -petalWidth*0.62, petalLen*0.92, -petalWidth*0.12);
+      ctx.quadraticCurveTo(petalLen*1.05, 0, petalLen*0.92, petalWidth*0.12);
+      ctx.quadraticCurveTo(petalLen*0.45, petalWidth*0.62, 0, petalWidth*0.22);
+      ctx.closePath();
+      ctx.fill();
+
+      // subtle center vein
+      ctx.strokeStyle = `hsla(${baseHue-4}, 70%, 30%, ${0.25*openT+0.05})`;
+      ctx.lineWidth = Math.max(0.6, petalWidth*0.03);
+      ctx.beginPath();
+      ctx.moveTo(petalLen*0.08,0);
+      ctx.lineTo(petalLen*0.85,0);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+  }
+
+  function drawSeedCenter(cx, cy, r, bloom, time){
+    const centerR = r * lerp(0.62, 0.42, easeOutCubic(clamp01(bloom)));
+    const grad = ctx.createRadialGradient(cx - centerR*0.3, cy - centerR*0.3, centerR*0.1, cx, cy, centerR);
+    grad.addColorStop(0, '#6b4726');
+    grad.addColorStop(0.55, '#4a2f18');
+    grad.addColorStop(1, '#2b1a0d');
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, centerR, 0, Math.PI*2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // seed spiral texture (fibonacci-ish dot pattern)
+    const dots = 90;
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    for (let i=0;i<dots;i++){
+      const t = i/dots;
+      const rad = centerR * Math.sqrt(t) * 0.94;
+      const ang = i * golden + time*0.15;
+      const x = cx + Math.cos(ang)*rad;
+      const y = cy + Math.sin(ang)*rad;
+      const size = lerp(1.1, 2.6, t) * (0.6 + 0.4*Math.sin(time+i));
+      ctx.beginPath();
+      ctx.fillStyle = i%3===0 ? 'rgba(90,60,30,.9)' : 'rgba(30,18,9,.85)';
+      ctx.arc(x, y, size, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawGlow(cx, cy, r, bloom){
+    const glowR = r * (1.6 + bloom*0.9);
+    const grad = ctx.createRadialGradient(cx, cy, r*0.2, cx, cy, glowR);
+    grad.addColorStop(0, `rgba(255,205,90,${0.25+bloom*0.22})`);
+    grad.addColorStop(1, 'rgba(255,205,90,0)');
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, glowR, 0, Math.PI*2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* particles: drifting pollen motes, more when blooming */
+  const motes = [];
+  function spawnMote(cx, cy, r){
+    motes.push({
+      x: cx + (Math.random()-0.5)*r*1.4,
+      y: cy + (Math.random()-0.5)*r*1.4,
+      vx: (Math.random()-0.5)*0.25,
+      vy: -0.15 - Math.random()*0.3,
+      life:0, maxLife: 140+Math.random()*160,
+      size: 1+Math.random()*2
+    });
+  }
+
+  let startTime = performance.now();
+
+  function loop(now){
+    if (!running) return;
+    const t = (now - startTime)/1000;
+    const dt = Math.min(0.05, (now - (loop._last||now))/1000);
+    loop._last = now;
+
+    // smoothing
+    const smooth = 1 - Math.pow(0.001, dt); // frame-rate independent smoothing
+    flower.bloom     = lerp(flower.bloom, flower.bloomTarget, smooth*0.9);
+    flower.tiltX     = lerp(flower.tiltX, flower.tiltXTarget, smooth*0.6);
+    flower.tiltY     = lerp(flower.tiltY, flower.tiltYTarget, smooth*0.6);
+    flower.stemGrow  = lerp(flower.stemGrow, flower.stemGrowTarget, smooth*0.5);
+    flower.handPresentSmooth = lerp(flower.handPresentSmooth, flower.handPresent?1:0, smooth*0.3);
+    flower.sway = Math.sin(t*0.6)*0.5 + flower.tiltX;
+
+    ctx.clearRect(0,0,W,H);
+
+    const groundY = H * 0.92;
+    const cx = W/2 + flower.tiltX * (W*0.12);
+    const baseFlowerY = H * (window.innerWidth < 640 ? 0.4 : 0.38);
+    const cy = baseFlowerY - flower.tiltY * (H*0.05) - flower.stemGrow * (H*0.02);
+    const topY = cy;
+    const r = Math.min(W, H) * (window.innerWidth < 640 ? 0.17 : 0.14) * (0.85 + flower.bloom*0.25);
+
+    // subtle head tilt via rotation transform on flower head only
+    const headTilt = flower.tiltX * 0.18;
+
+    drawStem(cx, groundY, topY + r*0.3, flower.sway, flower.stemGrow);
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(headTilt);
+    ctx.translate(-cx, -cy);
+
+    drawGlow(cx, cy, r, flower.bloom);
+    drawSepals(cx, cy, r, flower.bloom, t);
+
+    // two petal layers for depth
+    drawPetalLayer(cx, cy, r, 13, flower.bloom, 0.18 + t*0.01, 1.0, 0, t, flower.petalWiggleSeed);
+    drawPetalLayer(cx, cy, r, 13, flower.bloom, 0.18 + Math.PI/13 + t*0.01, 0.72, 6, t*1.05, flower.petalWiggleSeed+2);
+
+    drawSeedCenter(cx, cy, r, flower.bloom, t);
+    ctx.restore();
+
+    // pollen motes when substantially bloomed
+    if (flower.bloom > 0.55 && Math.random() < flower.bloom*0.35){
+      spawnMote(cx, cy, r);
+    }
+    for (let i=motes.length-1;i>=0;i--){
+      const m = motes[i];
+      m.life += dt*60;
+      m.x += m.vx; m.y += m.vy;
+      m.vy -= 0.001;
+      if (m.life > m.maxLife){ motes.splice(i,1); continue; }
+      const a = 1 - m.life/m.maxLife;
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(255, 220, 140, ${a*0.7})`;
+      ctx.arc(m.x, m.y, m.size, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    // update HUD
+    const st = computeState(flower.bloom);
+    if (st !== state){
+      state = st;
+      stateChip.textContent = stateLabels[state];
+      stateChip.style.transform = 'scale(1.12)';
+      setTimeout(()=>{ stateChip.style.transform='scale(1)'; }, 180);
+    }
+    bloomFill.style.width = (flower.bloom*100).toFixed(1) + '%';
+
+    // sky warms slightly with bloom
+    skyEl.style.filter = `saturate(${1 + flower.bloom*0.25}) brightness(${1 + flower.bloom*0.08})`;
+
+    rafId = requestAnimationFrame(loop);
+  }
+
+  // Pause processing nicely if tab hidden (saves battery on mobile)
+  document.addEventListener('visibilitychange', () => {
+    const experienceActive = introOverlay.classList.contains('hidden');
+    if (document.hidden){
+      running = false;
+      if (rafId) cancelAnimationFrame(rafId);
+    } else if (currentStream && !running && experienceActive){
+      running = true;
+      processFrame();
+      requestAnimationFrame(loop);
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
