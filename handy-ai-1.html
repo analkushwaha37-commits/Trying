@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Handy AI — Neon Bloom</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: #030308;
+    overflow: hidden;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+
+  #stage {
+    position: fixed; inset: 0;
+    width: 100vw; height: 100vh;
+  }
+
+  video {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    object-fit: cover;
+    transform: scaleX(-1);
+    filter: brightness(0.55) saturate(1.1);
+  }
+
+  canvas#overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    pointer-events: none;
+  }
+
+  /* vignette */
+  #vignette {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.75) 100%);
+    z-index: 5;
+  }
+
+  /* top status */
+  #status {
+    position: fixed;
+    top: 18px; left: 50%;
+    transform: translateX(-50%);
+    color: #7ef9ff;
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    opacity: 0.75;
+    z-index: 20;
+    text-shadow: 0 0 8px #00eaff;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+
+  /* neon love text popup */
+  #loveText {
+    position: fixed;
+    top: 8%;
+    left: 50%;
+    transform: translate(-50%, -20px);
+    font-size: clamp(28px, 6vw, 64px);
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #fff;
+    z-index: 30;
+    pointer-events: none;
+    opacity: 0;
+    white-space: nowrap;
+    font-family: 'Brush Script MT', cursive, 'Segoe UI', sans-serif;
+    text-shadow:
+      0 0 10px #ff2fd0,
+      0 0 20px #ff2fd0,
+      0 0 40px #ff2fd0,
+      0 0 80px #ff2fd0,
+      0 0 4px #fff;
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  #loveText.show {
+    opacity: 1;
+    transform: translate(-50%, 0px);
+    animation: neonFlicker 2.4s ease-in-out infinite;
+  }
+  @keyframes neonFlicker {
+    0%, 19%, 21%, 23%, 54%, 56%, 100% {
+      text-shadow:
+        0 0 10px #ff2fd0,
+        0 0 20px #ff2fd0,
+        0 0 40px #ff2fd0,
+        0 0 80px #ff2fd0,
+        0 0 4px #fff;
+      opacity: 1;
+    }
+    20%, 22%, 55% {
+      text-shadow: none;
+      opacity: 0.85;
+    }
+  }
+
+  /* bloom button bottom-left */
+  #bloomBtn {
+    position: fixed;
+    left: 22px; bottom: 22px;
+    z-index: 40;
+    padding: 12px 20px;
+    background: rgba(10, 5, 20, 0.55);
+    border: 1px solid #ff3fe0;
+    border-radius: 30px;
+    color: #ff9ff3;
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 0 10px rgba(255, 63, 224, 0.6), inset 0 0 8px rgba(255,63,224,0.3);
+    transition: all 0.25s ease;
+    user-select: none;
+  }
+  #bloomBtn:hover {
+    box-shadow: 0 0 22px rgba(255, 63, 224, 0.95), inset 0 0 12px rgba(255,63,224,0.5);
+    color: #fff;
+    transform: translateY(-2px);
+  }
+  #bloomBtn:active {
+    transform: translateY(0px) scale(0.97);
+  }
+  #bloomBtn.active {
+    border-color: #7ef9ff;
+    color: #bffcff;
+    box-shadow: 0 0 22px rgba(126, 249, 255, 0.9), inset 0 0 12px rgba(126,249,255,0.4);
+  }
+
+  /* small hint bottom right */
+  #hint {
+    position: fixed;
+    right: 18px; bottom: 22px;
+    z-index: 20;
+    color: rgba(200, 240, 255, 0.55);
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-align: right;
+    max-width: 240px;
+    pointer-events: none;
+    text-shadow: 0 0 6px rgba(0,234,255,0.4);
+  }
+
+  #loading {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #030308;
+    color: #7ef9ff;
+    font-size: 16px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    z-index: 100;
+    text-shadow: 0 0 10px #00eaff;
+    transition: opacity 0.5s ease;
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">Initializing Handy AI…</div>
+
+<div id="stage">
+  <video id="webcam" autoplay playsinline muted></video>
+  <canvas id="overlay"></canvas>
+  <div id="vignette"></div>
+</div>
+
+<div id="status">Show your open palm to the camera</div>
+<div id="loveText">I Love You Potato</div>
+
+<button id="bloomBtn">✦ Auto Bloom: Off</button>
+<div id="hint">Open your hand to bloom the flower<br/>Close it to let the petals fold</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+
+<script>
+(function () {
+  const video = document.getElementById('webcam');
+  const canvas = document.getElementById('overlay');
+  const ctx = canvas.getContext('2d');
+  const statusEl = document.getElementById('status');
+  const loveText = document.getElementById('loveText');
+  const bloomBtn = document.getElementById('bloomBtn');
+  const loading = document.getElementById('loading');
+
+  let W = window.innerWidth, H = window.innerHeight;
+  function resize() {
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W; canvas.height = H;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- Flower / bloom state ----------
+  let bloomAmount = 0;        // 0..1 current rendered bloom
+  let targetBloom = 0;        // 0..1 target based on hand or auto mode
+  let autoMode = false;
+  let autoDirection = 1;
+  let handCenter = { x: W / 2, y: H / 2 };
+  let smoothCenter = { x: W / 2, y: H / 2 };
+  let lastHandSeenAt = 0;
+  let flowerRotation = 0;
+  let loveShownFor = false; // whether text already triggered for this bloom cycle
+  let time = 0;
+
+  const NEON_COLORS = ['#ff2fd0', '#7ef9ff', '#c77dff', '#39ff88', '#ffde59'];
+
+  bloomBtn.addEventListener('click', () => {
+    autoMode = !autoMode;
+    bloomBtn.classList.toggle('active', autoMode);
+    bloomBtn.textContent = autoMode ? '✦ Auto Bloom: On' : '✦ Auto Bloom: Off';
+    statusEl.textContent = autoMode ? 'Auto bloom engaged…' : 'Show your open palm to the camera';
+  });
+
+  function showLoveText() {
+    loveText.classList.add('show');
+  }
+  function hideLoveText() {
+    loveText.classList.remove('show');
+  }
+
+  // ---------- Hand landmark helpers ----------
+  // Returns 0 (closed fist) .. 1 (fully open) based on fingertip distance from palm
+  function computeOpenness(landmarks) {
+    const wrist = landmarks[0];
+    const tips = [4, 8, 12, 16, 20];
+    const mcp = [2, 5, 9, 13, 17]; // base joints for normalizing scale
+
+    let handSize = dist(landmarks[0], landmarks[9]); // wrist to middle mcp as scale ref
+    if (handSize < 1e-6) handSize = 1;
+
+    let total = 0;
+    for (let i = 0; i < tips.length; i++) {
+      const tipDist = dist(wrist, landmarks[tips[i]]);
+      const baseDist = dist(wrist, landmarks[mcp[i]]);
+      const ratio = (tipDist - baseDist) / handSize;
+      total += ratio;
+    }
+    const avg = total / tips.length;
+    // Map roughly [-0.2 .. 1.4] to [0..1]
+    let openness = (avg + 0.2) / 1.6;
+    return clamp(openness, 0, 1);
+  }
+
+  function dist(a, b) {
+    const dx = a.x - b.x, dy = a.y - b.y, dz = (a.z || 0) - (b.z || 0);
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  // ---------- MediaPipe Hands setup ----------
+  const hands = new Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+  });
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.65,
+    minTrackingConfidence: 0.6
+  });
+
+  hands.onResults((results) => {
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+      const landmarks = results.multiHandLandmarks[0];
+      lastHandSeenAt = performance.now();
+
+      const openness = computeOpenness(landmarks);
+      if (!autoMode) {
+        targetBloom = openness;
+        statusEl.textContent = openness > 0.6
+          ? 'Blooming…'
+          : (openness < 0.25 ? 'Fist detected — folding petals' : 'Show your open palm to the camera');
+      }
+
+      // hand center (palm) mapped to screen space, mirrored to match video mirror
+      const palm = landmarks[9];
+      const nx = 1 - palm.x; // mirror
+      const ny = palm.y;
+      handCenter.x = nx * W;
+      handCenter.y = ny * H;
+    } else {
+      // no hand seen
+      if (!autoMode) {
+        const since = performance.now() - lastHandSeenAt;
+        if (since > 350) {
+          targetBloom = lerp(targetBloom, 0, 0.03); // gently relax closed if hand lost
+          if (since > 600) statusEl.textContent = 'Show your open palm to the camera';
+        }
+      }
+    }
+  });
+
+  let camera = null;
+  function startCamera() {
+    camera = new Camera(video, {
+      onFrame: async () => {
+        await hands.send({ image: video });
+      },
+      width: 960,
+      height: 720
+    });
+    camera.start().then(() => {
+      loading.style.opacity = '0';
+      setTimeout(() => loading.style.display = 'none', 500);
+    }).catch((err) => {
+      loading.textContent = 'Camera access denied or unavailable.';
+      console.error(err);
+    });
+  }
+
+  // request camera via getUserMedia first for permission clarity, then hand to Camera util
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then((stream) => {
+      video.srcObject = stream;
+      startCamera();
+    })
+    .catch((err) => {
+      loading.textContent = 'Camera access denied. Please allow camera permissions and reload.';
+      console.error(err);
+    });
+
+  // ---------- Drawing: neon outline flower (magic-circle style) ----------
+  function drawFlower(cx, cy, bloom, t) {
+    const petals = 8;
+    const baseRadius = Math.min(W, H) * 0.06;
+    const maxRadius = Math.min(W, H) * 0.30;
+    const petalLength = lerp(baseRadius * 0.4, maxRadius, bloom);
+    const petalWidth = lerp(0.05, 0.34, bloom); // angular width factor
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(flowerRotation);
+
+    const glowColor = NEON_COLORS[Math.floor((t * 0.15) % NEON_COLORS.length)];
+    const secondColor = NEON_COLORS[(Math.floor((t * 0.15) % NEON_COLORS.length) + 2) % NEON_COLORS.length];
+
+    // outer rotating magic-circle rings (only visible as bloom increases)
+    const ringAlpha = clamp(bloom * 0.9, 0, 0.9);
+    if (ringAlpha > 0.02) {
+      for (let r = 0; r < 2; r++) {
+        const ringRadius = maxRadius * (0.55 + r * 0.35) * (0.4 + bloom * 0.6);
+        ctx.beginPath();
+        const segs = 120;
+        for (let i = 0; i <= segs; i++) {
+          const a = (i / segs) * Math.PI * 2;
+          const wob = Math.sin(a * (petals) + t * 0.002 + r) * (ringRadius * 0.015);
+          const rr = ringRadius + wob;
+          const x = Math.cos(a + (r % 2 === 0 ? 1 : -1) * t * 0.0004) * rr;
+          const y = Math.sin(a + (r % 2 === 0 ? 1 : -1) * t * 0.0004) * rr;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = r === 0 ? secondColor : glowColor;
+        ctx.shadowBlur = 18 * ringAlpha;
+        ctx.shadowColor = ctx.strokeStyle;
+        ctx.globalAlpha = ringAlpha * (r === 0 ? 0.8 : 0.55);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // small tick marks around like a magic circle sigil
+    if (ringAlpha > 0.05) {
+      const tickCount = 24;
+      const tickRadius = maxRadius * (0.55 + bloom * 0.35) * 1.02;
+      ctx.strokeStyle = glowColor;
+      ctx.shadowBlur = 10 * ringAlpha;
+      ctx.shadowColor = glowColor;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = ringAlpha * 0.6;
+      for (let i = 0; i < tickCount; i++) {
+        const a = (i / tickCount) * Math.PI * 2 + t * 0.0003;
+        const x1 = Math.cos(a) * tickRadius;
+        const y1 = Math.sin(a) * tickRadius;
+        const x2 = Math.cos(a) * (tickRadius + 10 + 6 * Math.sin(t * 0.003 + i));
+        const y2 = Math.sin(a) * (tickRadius + 10 + 6 * Math.sin(t * 0.003 + i));
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Petals — drawn as outline-only curved shapes (no fill)
+    for (let layer = 0; layer < 2; layer++) {
+      const layerOffset = layer * (Math.PI / petals);
+      const layerScale = layer === 0 ? 1 : 0.62;
+      const layerAlphaBoost = layer === 0 ? 1 : 0.75;
+      const color = layer === 0 ? glowColor : secondColor;
+
+      for (let i = 0; i < petals; i++) {
+        const angle = (i / petals) * Math.PI * 2 + layerOffset + flowerRotation * 0.0;
+        const sway = Math.sin(t * 0.0015 + i) * 0.03 * bloom;
+
+        ctx.save();
+        ctx.rotate(angle + sway);
+
+        const len = petalLength * layerScale;
+        const wide = petalWidth * len;
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(
+          wide, len * 0.35,
+          wide * 0.55, len * 0.95,
+          0, len
+        );
+        ctx.bezierCurveTo(
+          -wide * 0.55, len * 0.95,
+          -wide, len * 0.35,
+          0, 0
+        );
+        ctx.closePath();
+
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = color;
+        ctx.shadowBlur = 14 + 10 * bloom;
+        ctx.shadowColor = color;
+        ctx.globalAlpha = 0.85 * layerAlphaBoost * (0.3 + bloom * 0.7);
+        ctx.stroke();
+
+        // inner vein line
+        ctx.beginPath();
+        ctx.moveTo(0, len * 0.05);
+        ctx.lineTo(0, len * 0.92);
+        ctx.lineWidth = 0.8;
+        ctx.globalAlpha = 0.4 * bloom;
+        ctx.stroke();
+
+        ctx.restore();
+      }
+    }
+
+    // center core — pulsing ring, outline only
+    const coreR = lerp(baseRadius * 0.5, baseRadius * 0.9, bloom);
+    ctx.beginPath();
+    ctx.arc(0, 0, coreR, 0, Math.PI * 2);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffffff';
+    ctx.shadowBlur = 20 * (0.3 + bloom);
+    ctx.shadowColor = glowColor;
+    ctx.globalAlpha = 0.9;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, coreR * 0.55, 0, Math.PI * 2);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = secondColor;
+    ctx.shadowBlur = 14 * (0.3 + bloom);
+    ctx.shadowColor = secondColor;
+    ctx.globalAlpha = 0.8;
+    ctx.stroke();
+
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------- Main animation loop ----------
+  function loop(t) {
+    time = t;
+    ctx.clearRect(0, 0, W, H);
+
+    if (autoMode) {
+      // gentle auto oscillation between 0 and 1
+      targetBloom += autoDirection * 0.0035;
+      if (targetBloom >= 1) { targetBloom = 1; autoDirection = -1; }
+      if (targetBloom <= 0.08) { targetBloom = 0.08; autoDirection = 1; }
+      // recenter flower to middle of screen in auto mode
+      smoothCenter.x = lerp(smoothCenter.x, W / 2, 0.05);
+      smoothCenter.y = lerp(smoothCenter.y, H / 2, 0.05);
+    } else {
+      smoothCenter.x = lerp(smoothCenter.x, handCenter.x, 0.15);
+      smoothCenter.y = lerp(smoothCenter.y, handCenter.y, 0.15);
+    }
+
+    bloomAmount = lerp(bloomAmount, targetBloom, 0.08);
+    flowerRotation += 0.0015 + bloomAmount * 0.0015;
+
+    drawFlower(smoothCenter.x, smoothCenter.y, bloomAmount, t);
+
+    // trigger love text near full bloom
+    if (bloomAmount > 0.85 && !loveShownFor) {
+      loveShownFor = true;
+      showLoveText();
+    } else if (bloomAmount < 0.6 && loveShownFor) {
+      loveShownFor = false;
+      hideLoveText();
+    }
+
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
